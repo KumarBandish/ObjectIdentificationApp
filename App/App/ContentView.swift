@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  ObjectIdentifyingApp
+//  App
 //
 //  Created by Bandish Kumar on 03/11/25.
 //
