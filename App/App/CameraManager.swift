@@ -27,6 +27,10 @@ class CameraManager: NSObject, ObservableObject {
     private var detectionRequests: [VNRequest] = []
     private var visionModel: VNCoreMLModel?
     
+    // MARK: - Throttling Properties
+//      private var frameCounter = 0
+//      private let detectionFrameInterval = 1 // Perform detection every 5th frame
+    
     override init() {
         super.init()
         setupYOLOModel()
@@ -35,18 +39,20 @@ class CameraManager: NSObject, ObservableObject {
     
     func setupYOLOModel() {
         do {
-            guard let model = try? yolov8n(configuration: MLModelConfiguration()) else {
-                print("Failed to load YOLOv8n model")
-                setupObjectDetection() // Fallback to built-in detection
+            guard let model8s = try? YOLOv8s(configuration: MLModelConfiguration()) else {
+                setupObjectDetection()
                 return
             }
+//            guard let model = try? yolov8n(configuration: MLModelConfiguration()) else {
+//                setupObjectDetection()
+//                return
+//            }
             
-            let visionModel = try VNCoreMLModel(for: model.model)
+            let visionModel = try VNCoreMLModel(for: model8s.model)
             self.visionModel = visionModel
             print("YOLOv8n model loaded successfully")
         } catch {
             print("Failed to setup YOLO model: \(error)")
-            setupObjectDetection() // Fallback to built-in detection
         }
     }
     
@@ -130,7 +136,7 @@ class CameraManager: NSObject, ObservableObject {
             setupObjectDetection()
             return
         }
-        
+        ///An image-analysis request that uses a Core ML model to process images.
         let detectionRequest = VNCoreMLRequest(model: visionModel) { [weak self] request, error in
             self?.processYOLODetectionResults(request: request, error: error)
         }
@@ -168,7 +174,7 @@ class CameraManager: NSObject, ObservableObject {
     }
 
     func startRecording() {
-        guard let movieOutput = movieOutput else { return }
+        guard let movieOutput else { return }
         
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording-\(Date().timeIntervalSince1970).mov")
@@ -190,7 +196,7 @@ class CameraManager: NSObject, ObservableObject {
     }
     
     func stopRecording() {
-        guard let movieOutput = movieOutput, movieOutput.isRecording else { return }
+        guard let movieOutput, movieOutput.isRecording else { return }
         movieOutput.stopRecording()
         isRecording = false
     }
@@ -199,8 +205,21 @@ class CameraManager: NSObject, ObservableObject {
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     
+    ///This delegate method is called every time a video frame is captured from the camera.
+
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        ///Extracts the image buffer from the video frame:
+        
+//        frameCounter += 1
+//        guard frameCounter % detectionFrameInterval == 0 else {
+//            // Skip detection for this frame if it's not the interval frame
+//            return
+//        }
+        
+        // Reset frameCounter if it grows too large, though it's usually fine to just let it increment.
+       
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        ///Creates a Vision request handler to process the image:
         
         let imageRequestHandler = VNImageRequestHandler(
             cvPixelBuffer: pixelBuffer,
@@ -208,13 +227,17 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             options: [:]
         )
         
+        ///Performs object detection using YOLO or other Vision requests:
         do {
             try imageRequestHandler.perform(detectionRequests)
         } catch {
             print("Failed to perform detection: \(error)")
         }
     }
-    
+    /*
+     - This function handles the results returned by the YOLO model.
+    - Processing YOLO Detection Results
+     */
     private func processYOLODetectionResults(request: VNRequest, error: Error?) {
         let startTime = CACurrentMediaTime()
         
@@ -232,12 +255,12 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         DispatchQueue.main.async { [weak self] in
             let detectionTime = (CACurrentMediaTime() - startTime) * 1000 // Convert to milliseconds
             
-            // Filter and sort detections
-            let topDetections = observations
-                .filter { $0.confidence > 0.25 } // Lower threshold for YOLO
-                .sorted { $0.confidence > $1.confidence }
-                .prefix(10) // Show more detections
+            ///Sorts by confidence and limits to top 10:
+
+            let topDetections = observations.filter { $0.confidence > 0.5 }.sorted { $0.confidence > $1.confidence }.prefix(10) // Show more detections
             
+            ///Converts results into readable labels
+            ///Updates the UI with detected objects and detection time.
             self?.detectedObjects = topDetections.compactMap { observation in
                 guard let topLabel = observation.labels.first else { return nil }
                 let confidencePercentage = Int(topLabel.confidence * 100)
@@ -285,11 +308,17 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 }
 
 // MARK: - AVCaptureFileOutputRecordingDelegate
+//Video Recording Events
 extension CameraManager: AVCaptureFileOutputRecordingDelegate {
+    
+    //Start recording
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
         print("Started recording to: \(fileURL)")
     }
     
+    //Finish recording
+    ///Logs recording start and end.
+    ///Saves the video file URL for later use.
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
         if let error = error {
             print("Recording error: \(error)")
@@ -299,3 +328,4 @@ extension CameraManager: AVCaptureFileOutputRecordingDelegate {
         }
     }
 }
+

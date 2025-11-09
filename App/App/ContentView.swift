@@ -33,7 +33,7 @@ struct ContentView: View {
                             }
                         }
                         
-                        Text("YOLOv8n Detection")
+                        Text("Object Detection")
                             .font(.headline)
                             .foregroundColor(.white)
                         
@@ -44,13 +44,6 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    // Model info
-                    Text("YOLOv8n")
-                        .font(.caption)
-                        .padding(6)
-                        .background(Color.blue.opacity(0.7))
-                        .foregroundColor(.white)
-                        .cornerRadius(4)
                 }
                 .padding()
                 
@@ -87,7 +80,7 @@ struct ContentView: View {
                     .cornerRadius(12)
                     .padding()
                 } else {
-                    // Show waiting message
+                   // Show waiting message
                     Text("Detecting objects...")
                         .padding()
                         .background(Color.black.opacity(0.5))
@@ -130,7 +123,7 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            if cameraManager.session.isRunning == false {
+            if !cameraManager.session.isRunning {
                 cameraManager.checkCameraPermissions()
             }
         }
